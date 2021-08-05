@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, url_for, redirect, send_from_directory
+from flask import Flask, render_template, request, url_for, redirect, send_from_directory, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, current_user, logout_user
@@ -31,7 +31,7 @@ def load_user(user_id):
 
 @app.route('/')
 def home():
-    return render_template("index.html")
+    return render_template("index.html", logged_in=current_user.is_authenticated)
 
 
 @app.route('/register', methods=["POST", "GET"])
@@ -45,14 +45,19 @@ def register():
         password=hashed_pass,
         name = request.form['name'],
         )
-        db.session.add(new_user)
-        db.session.commit()
 
-        login_user(new_user)
+        if User.query.filter_by(email=request.form.get('email')):
+            flash('There is already a user with that email.')
+            return redirect(url_for('register'))
+        else:
+            db.session.add(new_user)
+            db.session.commit()
 
-        return render_template("secrets.html", name=request.form['name'])
+            login_user(new_user)
 
-    return render_template("register.html")
+            return render_template("secrets.html", name=request.form['name'], logged_in=current_user.is_authenticated)
+
+    return render_template("register.html", logged_in=current_user.is_authenticated)
 
 
 
@@ -62,13 +67,19 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
-
         user = User.query.filter_by(email=email).first()
-        name = user.name
-        if check_password_hash(pwhash=user.password, password=password):
-            login_user(user)
-            return render_template("secrets.html", name=name)
-    return render_template("login.html")
+        if user:
+            name = user.name
+            if check_password_hash(pwhash=user.password, password=password):
+                login_user(user)
+                return render_template("secrets.html", name=name, logged_in=current_user.is_authenticated)
+            else:
+                flash('Incorrect password.')
+                return redirect(url_for('login'))
+        else:
+            flash('That email does not exist.')
+            return redirect(url_for('login'))
+    return render_template("login.html", logged_in=current_user.is_authenticated)
 
 
 @app.route('/secrets')
